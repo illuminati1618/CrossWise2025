@@ -1,0 +1,243 @@
+---
+layout: tailwind
+title: Directions
+search_exclude: true
+permalink: /directions/
+menu: nav/directions.html
+---
+
+<div class="w-full max-w-4xl mx-auto p-6 bg-dark rounded-lg shadow-lg">
+  <h1 class="text-3xl font-bold text-accent mb-4">Border Crossing Directions</h1>
+  <p class="text-gray-200 mb-6">Get directions for crossing the U.S.-Mexico border at San Ysidro or Otay Mesa.</p>
+<div class="w-full mt-6">
+  <!-- Full-width Map -->
+  <div id="map" class="w-full h-96 rounded-lg mb-8 border-2 border-gray-700 shadow-lg"></div>
+
+  <!-- Flex container for directions + border wait -->
+  <div class="flex flex-wrap gap-6">
+
+    <!-- Directions Panel -->
+    <div class="flex-2 min-w-[300px]">
+      <form id="route-form" class="mb-6">
+        <label class="block text-sm font-medium text-gray-200 mb-2">Start (U.S. Side):</label>
+        <input id="start" type="text" placeholder="e.g. San Ysidro Transit Center" style="background-color: #1E1E1E; color: #f0f4f8; border: 1px solid #3c4c60; border-radius: 6px;" class="w-full p-3 focus:outline-none focus:ring-2 focus:ring-accent mb-4" />
+
+        <label class="block text-sm font-medium text-gray-200 mb-2">Destination (Tijuana Side):</label>
+        <input id="end" type="text" placeholder="e.g. Hotel Lucerna Tijuana" style="background-color: #1E1E1E; color: #f0f4f8; border: 1px solid #3c4c60; border-radius: 6px;" class="w-full p-3 focus:outline-none focus:ring-2 focus:ring-accent mb-4" />
+
+        <button type="submit" class="w-full py-2 px-4 bg-accent text-white rounded-md hover:bg-blue-600">Get Directions</button>
+      </form>
+
+      <div id="directions-panel" class="bg-dark rounded-lg p-4 text-gray-200 text-sm leading-relaxed max-h-96 overflow-y-auto"></div>
+    </div>
+
+    <!-- Border Wait Time Panel -->
+    <div class="flex-1 min-w-[260px] bg-dark p-6 rounded-lg text-gray-200">
+      <h3 class="text-lg font-semibold text-accent mb-4">Current Border Wait</h3>
+
+      <div class="bg-darker rounded-md p-4 mb-4">
+        <strong class="text-accent">San Ysidro</strong><br />
+        🚗 Standard: <span id="sy-standard" class="text-gray-400">Loading...</span><br />
+        🛂 SENTRI: <span id="sy-sentri" class="text-gray-400">Loading...</span><br />
+        🚶 Pedestrian: <span id="sy-pedestrian" class="text-gray-400">Loading...</span><br />
+      </div>
+
+      <div class="bg-darker rounded-md p-4">
+        <strong class="text-accent">Otay Mesa</strong><br />
+        🚗 Standard: <span id="om-standard" class="text-gray-400">Loading...</span><br />
+        🛂 SENTRI: <span id="om-sentri" class="text-gray-400">Loading...</span><br />
+        🚶 Pedestrian: <span id="om-pedestrian" class="text-gray-400">Loading...</span><br />
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Google Maps Script -->
+<script>
+  let map, directionsService, directionsRenderer;
+
+  function initMap() {
+    map = new google.maps.Map(document.getElementById("map"), {
+      center: { lat: 32.5439, lng: -117.0283 },
+      zoom: 12,
+    });
+
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer({
+      panel: document.getElementById("directions-panel"),
+    });
+
+    directionsRenderer.setMap(map);
+  }
+
+  document.getElementById("route-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    const start = document.getElementById("start").value;
+    const end = document.getElementById("end").value;
+
+    directionsService.route(
+      {
+        origin: start,
+        destination: end,
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (response, status) => {
+        if (status === "OK") {
+          directionsRenderer.setDirections(response);
+        } else {
+          alert("Directions request failed due to " + status);
+        }
+      }
+    );
+  });
+</script>
+
+<!-- Border Wait Time Script -->
+ <script type="module">
+  import {
+    login,
+    pythonURI,
+    fetchOptions,
+  } from "{{site.baseurl}}/assets/js/api/config.js";
+
+  function getColor(minutes) {
+    const m = parseInt(minutes);
+    if (isNaN(m)) return "text-gray-400";
+    if (m <= 30) return "text-green-400";
+    if (m <= 89) return "text-yellow-400";
+    return "text-red-400";
+  }
+
+  function setTime(id, minutes) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = minutes ? `${minutes} min` : "No data";
+    el.className = getColor(minutes);
+  }
+
+  async function fetchLiveWaitTimes() {
+    try {
+      const res = await fetch(`${pythonURI}/api/proxy/waittimes`, fetchOptions);
+      if (!res.ok) throw new Error("Failed to fetch wait times");
+      const data = await res.json();
+
+      const sanYsidro = data.find(p => p.port_name === "San Ysidro");
+      const otayMesa = data.find(p => p.port_name === "Otay Mesa" && p.crossing_name === "Passenger");
+
+      setTime("sy-standard", sanYsidro?.passenger_vehicle_lanes?.standard_lanes?.delay_minutes);
+      setTime("sy-sentri", sanYsidro?.passenger_vehicle_lanes?.NEXUS_SENTRI_lanes?.delay_minutes);
+      setTime("sy-pedestrian", sanYsidro?.pedestrian_lanes?.standard_lanes?.delay_minutes);
+
+      setTime("om-standard", otayMesa?.passenger_vehicle_lanes?.standard_lanes?.delay_minutes);
+      setTime("om-sentri", otayMesa?.passenger_vehicle_lanes?.NEXUS_SENTRI_lanes?.delay_minutes);
+      setTime("om-pedestrian", otayMesa?.pedestrian_lanes?.standard_lanes?.delay_minutes);
+    } catch (err) {
+      console.error("Failed to load wait times:", err);
+    }
+  }
+
+  fetchLiveWaitTimes();
+  setInterval(fetchLiveWaitTimes, 5 * 60 * 1000);
+</script>
+
+
+
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD9AQtE_WlHC0RvWvZ8BoP2ypr3EByvRDs&callback=initMap"></script>
+
+<style>
+  /* Removed custom gradient background */
+  body {
+    color: #f0f4f8;
+    font-family: 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+
+  h1, h2, h3 {
+    color: #77c4fe;
+    font-weight: 600;
+  }
+
+  /* Form Inputs */
+  input[type="text"] {
+    background-color: #1E1E1E;
+    color: white;
+    border: 1px solid #3c4c60;
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 5px;
+    margin-bottom: 15px;
+    width: 100%;
+  }
+
+  input[type="text"]::placeholder {
+    color: #a0aec0;
+  }
+
+  button {
+    background-color: #4f89e3;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+
+  button:hover {
+    background-color: #3a6dc2;
+  }
+
+  /* Map Box */
+  #map {
+    border: 2px solid #2d3f56;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  }
+
+  /* Directions Panel */
+  #directions-panel {
+    background-color:rgb(250, 251, 251);
+    border-radius: 12px;
+    padding: 15px;
+    margin-top: 20px;
+    color: #e2e8f0;
+    font-size: 14px;
+    line-height: 1.6;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  /* Border Wait Box */
+  .border-wait-box {
+    background-color: #1f2937;
+    padding: 16px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    color: #ffffff;
+  }
+
+  .border-wait-box strong {
+    color: #77c4fe;
+  }
+
+  .highlight-green {
+    color: #41ff9b;
+  }
+
+  .highlight-orange {
+    color: orange;
+  }
+
+  .highlight-red {
+    color: #ff5a5a;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .flex {
+      flex-direction: column;
+    }
+  }
+</style>
