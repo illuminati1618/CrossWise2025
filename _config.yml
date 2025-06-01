@@ -2,8 +2,8 @@ title: CrossWise
 description: "Efficient Border Crossing Assistant"
 owner_name: Yash Parikh
 github_username: illuminati1618
-github_repo: "CrossWise"
-baseurl: "/CrossWise"
+github_repo: "crosswise_frontend"
+baseurl: "/crosswise_frontend"
 future: true
 remote_theme: jekyll/minima
 minima:
